@@ -68,12 +68,15 @@ fn make(step: *Step, options: Step.MakeOptions) anyerror!void {
     const init: *Step.Compile = @fieldParentPtr("step", step.dependencies.getLast());
 
     const _bin_dir = init.getEmittedBinDirectory().getPath3(b, step);
-    const bin_dir = _bin_dir.openDir(".", .{}) catch @panic("Failed to open bin dir");
+    var bin_dir = _bin_dir.openDir(".", .{}) catch @panic("Failed to open bin dir");
+    defer bin_dir.close();
 
     const init_file = bin_dir.openFile("init", .{}) catch @panic("init not found");
+    defer init_file.close();
     var init_stream = std.io.StreamSource{ .file = init_file };
 
     const initramfs_file = bin_dir.createFile("initramfs.cpio", .{}) catch @panic("Create initramfs file failed");
+    defer initramfs_file.close();
     var initramfs_stream = std.io.StreamSource{ .file = initramfs_file };
 
     var cpio = try Cpio.init(&initramfs_stream);
@@ -82,7 +85,6 @@ fn make(step: *Step, options: Step.MakeOptions) anyerror!void {
 }
 
 pub fn build(b: *std.Build) void {
-    // TODO: tests(:
     var test_step = b.step("test", "Run tests");
     test_step.dependOn(&addRunSystem(b).step);
     return;
