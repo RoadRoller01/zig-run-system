@@ -2,7 +2,7 @@ const std = @import("std");
 const Cpio = @import("cpio.zig");
 const Step = std.Build.Step;
 
-pub fn addRunSystem(hisB: *std.Build) !*std.Build.Step.Run {
+pub fn addRunSystem(hisB: *std.Build) *std.Build.Step.Run {
     const build_root_path = hisB.build_root.path orelse std.fs.cwd().realpathAlloc(hisB.allocator, ".") catch unreachable;
     const dir_name = std.fs.path.basename(build_root_path);
 
@@ -80,6 +80,6 @@ fn make(step: *Step, options: Step.MakeOptions) anyerror!void {
 pub fn build(b: *std.Build) void {
     // TODO: tests(:
     const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&(try addRunSystem(b)).step);
+    test_step.dependOn(&addRunSystem(b).step);
     return;
 }
