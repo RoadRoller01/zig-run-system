@@ -26,7 +26,8 @@ pub fn addRunSystem(hisB: *std.Build) *std.Build.Step.Run {
     });
     // b.installArtifact(init);
 
-    var initramfs_step = Step.init(.{
+    const initramfs_step = b.allocator.create(Step) catch @panic("OOM");
+    initramfs_step.* = Step.init(.{
         .name = "GenerateInitramfs",
         .id = .custom,
         .owner = b,
@@ -36,8 +37,8 @@ pub fn addRunSystem(hisB: *std.Build) *std.Build.Step.Run {
 
     const initramfs_file = init.getEmittedBinDirectory().path(b, "initramfs.cpio");
 
-    const call_qemu = b.addSystemCommand(switch (target.result.cpu.arch) {
-        .aarch64 => &.{"qemu-system-aarch644"},
+    var call_qemu = b.addSystemCommand(switch (target.result.cpu.arch) {
+        .aarch64 => &.{"qemu-system-aarch64"},
         .x86_64 => &.{"qemu-system-x86_64"},
         else => @panic("arch is not added"),
     });
@@ -55,7 +56,7 @@ pub fn addRunSystem(hisB: *std.Build) *std.Build.Step.Run {
     call_qemu.addArg("-initrd");
     call_qemu.addFileArg(initramfs_file);
 
-    call_qemu.step.dependOn(&initramfs_step);
+    call_qemu.step.dependOn(initramfs_step);
 
     return call_qemu;
 }
@@ -66,10 +67,13 @@ fn make(step: *Step, options: Step.MakeOptions) anyerror!void {
     const b = step.owner;
     const init: *Step.Compile = @fieldParentPtr("step", step.dependencies.getLast());
 
-    const init_file = try init.getEmittedBin().getPath3(b, step).openFile("", .{});
+    const _bin_dir = init.getEmittedBinDirectory().getPath3(b, step);
+    const bin_dir = _bin_dir.openDir(".", .{}) catch @panic("Failed to open bin dir");
+
+    const init_file = bin_dir.openFile("init", .{}) catch @panic("init not found");
     var init_stream = std.io.StreamSource{ .file = init_file };
 
-    const initramfs_file = try init.getEmittedBinDirectory().getPath3(b, step).openFile("initramfs.cpio", .{ .mode = .write_only });
+    const initramfs_file = bin_dir.createFile("initramfs.cpio", .{}) catch @panic("Create initramfs file failed");
     var initramfs_stream = std.io.StreamSource{ .file = initramfs_file };
 
     var cpio = try Cpio.init(&initramfs_stream);
@@ -79,7 +83,7 @@ fn make(step: *Step, options: Step.MakeOptions) anyerror!void {
 
 pub fn build(b: *std.Build) void {
     // TODO: tests(:
-    const test_step = b.step("test", "Run tests");
+    var test_step = b.step("test", "Run tests");
     test_step.dependOn(&addRunSystem(b).step);
     return;
 }
