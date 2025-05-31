@@ -15,15 +15,36 @@ pub fn addRunSystem(hisB: *std.Build) *std.Build.Step.Run {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const init_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
+    const init = b.addExecutable(.{
+        .name = "init",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    const linux_h = b.addWriteFile("linux.h",
+        \\#include <asm-generic/setup.h>
+        \\#include <linux/kexec.h>
+        \\#include <linux/keyctl.h>
+        \\#include <linux/major.h>
+        \\#include <sys/epoll.h>
+        \\#include <sys/ioctl.h>
+        \\#include <termios.h>
+    );
+
+    const linux_headers = b.addTranslateC(.{
+        .root_source_file = .{ .generated = .{ .file = &linux_h.generated_directory, .sub_path = "linux.h" } },
         .target = target,
         .optimize = optimize,
     });
-    const init = b.addExecutable(.{
-        .name = "init",
-        .root_module = init_mod,
-    });
+
+    const linux_headers_module = linux_headers.addModule("linux_headers");
+
+    init.root_module.addImport("linux_headers", linux_headers_module);
+
     // b.installArtifact(init);
 
     const initramfs_step = b.allocator.create(Step) catch @panic("OOM");
