@@ -1,4 +1,4 @@
-Like `addRunArtifact` but use qemu-system-_instead of qemu-_ or qemu-user,
+Like `addRunArtifact` but use qemu-system-* instead of qemu-* or qemu-user,
 the result of that better support most syscalls unlike qemu-user
 Note: not all syscalls are supported. You can request one by editing `images/.config.arch`
 and compile it(:, or I might create CI action to do it idk. Feel free to add one(:
