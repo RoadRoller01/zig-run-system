@@ -2,13 +2,15 @@ const std = @import("std");
 const Cpio = @import("./cpio.zig");
 const Step = std.Build.Step;
 
-pub fn addRunSystem(hisB: *std.Build, argv: []const []const u8) *std.Build.Step.Run {
+pub fn addRunSystem(hisB: *std.Build, target: std.Build.ResolvedTarget, argv: []const []const u8) *std.Build.Step.Run {
     const hisBDir = hisB.build_root.path orelse std.fs.cwd().realpathAlloc(hisB.allocator, ".") catch unreachable;
     const dir_name = std.fs.path.basename(hisBDir);
 
     const b =
         if (std.mem.startsWith(u8, dir_name, "zig-run-system"))
             hisB
+        else if (std.mem.startsWith(u8, dir_name, "zig_run_system"))
+            unreachable
         else
             hisB.dependency("zig_run_system", .{}).builder;
 
@@ -18,7 +20,6 @@ pub fn addRunSystem(hisB: *std.Build, argv: []const []const u8) *std.Build.Step.
         else
             b.build_root.path orelse std.fs.cwd().realpathAlloc(b.allocator, ".") catch unreachable;
 
-    const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const init_mod = hisB.createModule(.{
@@ -63,13 +64,13 @@ pub fn addRunSystem(hisB: *std.Build, argv: []const []const u8) *std.Build.Step.
             "-cpu",
             "cortex-a53",
             "-append",
-            b.fmt("console=ttyAMA0 init=\\init {s} {s} {s} {s} ", .{ hisBDir, b.graph.zig_lib_directory.path.?, bDir orelse "none", std.mem.join(b.allocator, " ", argv) catch unreachable }),
+            b.fmt("console=ttyAMA0 init=\\init -- {s} {s} {s} {s} ", .{ hisBDir, b.graph.zig_lib_directory.path.?, bDir orelse "none", std.mem.join(b.allocator, " ", argv) catch unreachable }),
         },
         .x86_64 => &.{
             "-kernel",
             b.path("images/bzImage").src_path.sub_path,
             "-append",
-            b.fmt("console=ttyS0 init=\\init {s} {s} {s} {s}", .{ hisBDir, b.graph.zig_lib_directory.path.?, bDir orelse "none", std.mem.join(b.allocator, " ", argv) catch unreachable }),
+            b.fmt("console=ttyS0 init=\\init -- {s} {s} {s} {s} ", .{ hisBDir, b.graph.zig_lib_directory.path.?, bDir orelse "none", std.mem.join(b.allocator, " ", argv) catch unreachable }),
         },
         else => @panic("linux arch is not added"),
     } else @panic("os is not added"));
@@ -133,8 +134,9 @@ fn make(step: *Step, options: Step.MakeOptions) anyerror!void {
 
 pub fn build(b: *std.Build) void {
     if (b.pkg_hash.len == 0) {
+        const target = b.standardTargetOptions(.{});
         var test_step = b.step("test", "Run tests");
-        test_step.dependOn(&addRunSystem(b, &.{ "tajreba", "jamela" }).step);
+        test_step.dependOn(&addRunSystem(b, target, &.{ "tajreba", "jamela" }).step);
     }
     return;
 }
