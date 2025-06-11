@@ -3,6 +3,7 @@ const linux = std.os.linux;
 const log = std.log;
 const fs = std.fs;
 const errno = std.posix.errno;
+const MS = std.os.linux.MS;
 
 pub fn main() !void {
     // const allo = std.heap.page_allocator;
@@ -17,44 +18,49 @@ pub fn main() !void {
     }
 
     var args = try std.process.argsAlloc(std.heap.page_allocator);
-    const host0Dir = args[1];
-    const host1Dir = args[2];
-    const host2Dir = args[3];
-    const argv = args[4..];
 
     log.info("uname: {s} {s} {s} {s} {s} {s}", std.posix.uname());
 
     const root = try fs.openDirAbsolute("/", .{});
 
-    log.info("Mounting /proc and /sys", .{});
-    try root.makeDir("proc");
-    try root.makeDir("sys");
-    try mount("none", "/proc", "proc", 0, 0);
-    try mount("none", "/sys", "sysfs", 0, 0);
+    log.info("Mounting /proc, /sys, /dev and /run", .{});
+    try fs.cwd().makePath("/proc");
+    try mount("proc", "/proc", "proc", MS.NOSUID | MS.NODEV | MS.NOEXEC, 0);
+
+    try fs.cwd().makePath("/sys");
+    try mount("sysfs", "/sys", "sysfs", MS.NOSUID | MS.NODEV | MS.NOEXEC | MS.RELATIME, 0);
+    // try mount("securityfs", "/sys/kernel/security", "securityfs", MS.NOSUID | MS.NODEV | MS.NOEXEC | MS.RELATIME, 0);
+    // try mount("debugfs", "/sys/kernel/debug", "debugfs", MS.NOSUID | MS.NODEV | MS.NOEXEC | MS.RELATIME, 0);
+
+    try fs.cwd().makePath("/dev");
+    try mount("devtmpfs", "/dev", "devtmpfs", MS.SILENT | MS.NOSUID | MS.NOEXEC, 0);
+
+    try fs.cwd().makePath("/run");
+    try mount("tmpfs", "/run", "tmpfs", MS.NOSUID | MS.NODEV, 0);
 
     const data: [*:0]const u8 = "trans=virtio,version=9p2000.L";
-    log.info("Making Path {s}", .{host0Dir});
-    try root.makePath(host0Dir[1..]);
-    try mount("host0", host0Dir, "9p", 0, @intFromPtr(data));
+    log.info("Making Path {s}", .{args[1]});
+    try root.makePath(args[1][1..]);
+    try mount("host0", args[1], "9p", 0, @intFromPtr(data));
 
-    log.info("Making Path {s}", .{host1Dir});
-    try root.makePath(host1Dir[1..]);
-    try mount("host1", host1Dir, "9p", 0, @intFromPtr(data));
+    log.info("Making Path {s}", .{args[2]});
+    try root.makePath(args[2][1..]);
+    try mount("host1", args[2], "9p", 0, @intFromPtr(data));
 
-    if (host2Dir[0] != 'n') {
-        log.info("Making Path {s}", .{host2Dir});
-        try root.makePath(host2Dir[1..]);
-        try mount("host2", host2Dir, "9p", 0, @intFromPtr(data));
+    if (args[3][0] != 'n') {
+        log.info("Making Path {s}", .{args[3]});
+        try root.makePath(args[3][1..]);
+        try mount("host2", args[3], "9p", 0, @intFromPtr(data));
     }
 
-    log.info("Calling: {s}", .{try std.mem.join(std.heap.page_allocator, " ", argv)});
-    const child = try std.process.Child.run(.{
-        .allocator = std.heap.page_allocator,
-        .argv = argv,
-        .cwd = host0Dir,
-    });
+    log.info("Calling: {s}", .{try std.mem.join(std.heap.page_allocator, " ", args[4..])});
 
-    log.info("Calling reault: {any}", .{child.term});
+    try (try fs.openDirAbsolute(args[1], .{})).setAsCwd();
+
+    var child = std.process.Child.init(args[4..], std.heap.page_allocator);
+    const term = try child.spawnAndWait();
+
+    log.info("Calling reault : {any}", .{term});
 }
 
 fn mount(
